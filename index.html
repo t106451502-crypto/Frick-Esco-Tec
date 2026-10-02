@@ -218,8 +218,19 @@ input[type=range]{width:100%;accent-color:var(--accent)}
   .hdr-btns::-webkit-scrollbar{display:none}
   .hdr-btns button{min-height:38px;padding:8px 12px}
 }
+
+/* ===== 版本／更新 ===== */
+#upd{margin:26px auto 0;max-width:980px;display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--card,rgba(255,255,255,.7))}
+#upd .ver{font:600 12px/1.3 var(--f-mono);color:var(--muted);letter-spacing:.04em}
+#upd .ver b{color:var(--ink,#123);font-weight:700}
+#upd button{min-height:40px;padding:8px 16px;border-radius:10px;border:1px solid var(--accent-ink);background:var(--accent-ink);color:#fff;font:600 14px/1 var(--f-disp);cursor:pointer;position:relative}
+#upd button:disabled{opacity:.6;cursor:default}
+#upd button.new::after{content:'';position:absolute;top:-4px;right:-4px;width:12px;height:12px;border-radius:50%;background:#e5482b;border:2px solid #fff}
+#upd .msg{flex:1 1 220px;font-size:13px;color:var(--muted);min-height:1.2em}
+#upd .msg.ok{color:#1f7a3a}#upd .msg.warn{color:#b3261e}
 </style>
 
+<script>window.APP_VERSION='2026.10.02-1';</script>
 <div id="home" hidden>
   <div class="hwrap">
     <div class="eyebrow">Frick · Screw Compressor · Control Panel</div>
@@ -236,6 +247,11 @@ input[type=range]{width:100%;accent-color:var(--accent)}
         <div class="mb"><h2>Quantum HD 控制盤</h2><p>組裝圖 649D6508、配線圖 649D6513。可開門看配線、數位／類比 I/O 板與 Q6／Q5 處理器板；內建面板模擬。</p>
         <div class="go"><button type="button" data-m="panel">進入控制盤</button></div></div></article>
     </div>
+  <div id="upd" role="region" aria-label="版本與更新">
+    <span class="ver">版本 <b id="appVer"></b></span>
+    <button type="button" id="bUpd">檢查更新</button>
+    <span class="msg" id="updMsg" aria-live="polite"></span>
+  </div>
   </div>
 </div>
 <div id="app">
@@ -4243,6 +4259,43 @@ buildPt(); $('ptQ').addEventListener('input',e=>buildPt(e.target.value));
 }
 </script>
 <!-- PANEL MODULE END -->
+<script>
+/* ===== 手動更新：讀 GitHub 上最新的 version.json，版本較新就清快取並重新載入 ===== */
+(function(){
+  var V=window.APP_VERSION, btn=document.getElementById('bUpd'), msg=document.getElementById('updMsg');
+  document.getElementById('appVer').textContent='v'+V;
+  var num=function(v){return String(v).split(/[^0-9]+/).filter(Boolean).map(Number);};
+  var newer=function(a,b){a=num(a);b=num(b);for(var i=0;i<Math.max(a.length,b.length);i++){var x=a[i]||0,y=b[i]||0;if(x!==y)return x>y;}return false;};
+  var latest=null;
+  function say(t,cls){msg.textContent=t;msg.className='msg'+(cls?' '+cls:'');}
+  function fetchVer(){ return fetch('version.json?t='+Date.now(),{cache:'no-store'}).then(function(r){ if(!r.ok) throw new Error(r.status); return r.json(); }).then(function(j){ return j.version; }); }
+  function apply(v){
+    say('正在更新到 v'+v+'…');
+    var jobs=[];
+    try{ if(window.caches) jobs.push(caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); })); }catch(e){}
+    try{ if(navigator.serviceWorker) jobs.push(navigator.serviceWorker.getRegistrations().then(function(rs){ return Promise.all(rs.map(function(r){ return r.unregister(); })); })); }catch(e){}
+    Promise.all(jobs).catch(function(){}).then(function(){
+      // 先用 no-store 把新的 index.html 抓進來，再帶版本參數重新開啟（避開手機主畫面 App 的舊快取）
+      return fetch(location.pathname+'?v='+encodeURIComponent(v),{cache:'reload'}).catch(function(){});
+    }).then(function(){ location.replace(location.pathname+'?v='+encodeURIComponent(v)+'#home'); });
+  }
+  function check(manual){
+    if(manual){ btn.disabled=true; say('檢查中…'); }
+    fetchVer().then(function(v){
+      latest=v;
+      if(newer(v,V)){ btn.classList.add('new'); btn.textContent='更新到 v'+v; say('有新版本 v'+v+'（目前 v'+V+'）','warn'); if(manual) apply(v); }
+      else { btn.classList.remove('new'); btn.textContent='檢查更新'; if(manual) say('已是最新版本','ok'); }
+    }).catch(function(){ if(manual) say('無法檢查更新：請確認網路，或在 GitHub 網址開啟','warn'); })
+      .then(function(){ btn.disabled=false; });
+  }
+  btn.addEventListener('click',function(){ if(latest&&newer(latest,V)) apply(latest); else check(true); });
+  // 開啟時與回到 App 時自動檢查（只顯示紅點提示，不會自動重新載入）
+  setTimeout(function(){check(false);},2500);
+  document.addEventListener('visibilitychange',function(){ if(!document.hidden) check(false); });
+  // 更新後把網址上的 ?v= 拿掉
+  if(/[?&]v=/.test(location.search)) history.replaceState(null,'',location.pathname+location.hash);
+})();
+</script>
 
 </body>
 </html>
